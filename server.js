@@ -17,7 +17,7 @@ const PORT = process.env.PORT || 5000;
 // Diperbarui agar lebih spesifik mengizinkan port lokal frontend Vue kamu (5173)
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: "https://absenin-frontend.vercel.app",
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
   }),
@@ -715,12 +715,10 @@ app.post("/api/guru/absensi", async (req, res) => {
     const jadwalResult = await db.query(jadwalQuery, [jadwal_id]);
 
     if (jadwalResult.rows.length === 0) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: "Konfigurasi jadwal tidak ditemukan.",
-        });
+      return res.status(404).json({
+        success: false,
+        message: "Konfigurasi jadwal tidak ditemukan.",
+      });
     }
 
     const { hari, jam_mulai, jam_selesai } = jadwalResult.rows[0];
@@ -800,26 +798,22 @@ app.post("/api/guru/absensi", async (req, res) => {
     }
 
     await db.query("COMMIT");
-    res
-      .status(200)
-      .json({
-        success: true,
-        message:
-          "Seluruh data presensi siswa berhasil diverifikasi dan dikunci aman!",
-      });
+    res.status(200).json({
+      success: true,
+      message:
+        "Seluruh data presensi siswa berhasil diverifikasi dan dikunci aman!",
+    });
   } catch (error) {
     await db.query("ROLLBACK");
     console.error("Gagal mengunci absensi:", error.message);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Terjadi gangguan internal pada server database sekolah.",
-      });
+    res.status(500).json({
+      success: false,
+      message: "Terjadi gangguan internal pada server database sekolah.",
+    });
   }
 });
 
 // Jalankan Server
 app.listen(PORT, () => {
-  console.log(`Server backend berjalan di http://localhost:${PORT}`);
+  console.log(`Server backend berjalan di port ${PORT}`);
 });
