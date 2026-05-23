@@ -7,6 +7,7 @@ const express = require("express");
 const cors = require("cors");
 const db = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
+const ExcelJS = require("exceljs");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -33,8 +34,8 @@ app.use(
         callback(new Error("Ditolak oleh sistem keamanan CORS Global!"));
       }
     },
-    credentials: true
-  }) // 🌟 PERBAIKAN: Tanda koma di sini sudah DIHAPUS bersih
+    credentials: true,
+  }), // 🌟 PERBAIKAN: Tanda koma di sini sudah DIHAPUS bersih
 );
 
 app.use(express.json()); // Agar server bisa membaca data format JSON
@@ -824,6 +825,116 @@ app.post("/api/guru/absensi", async (req, res) => {
       success: false,
       message: "Terjadi gangguan internal pada server database sekolah.",
     });
+  }
+});
+
+// 🌟 ENDPOINT EKSPOR EXCEL PRESENSI
+app.get("/api/absensi/ekspor-excel", async (req, res) => {
+  try {
+    const { kelas_id, tanggal } = req.query;
+
+    // 1. Ambil data absensi + data murid dari Supabase
+    // (Sesuaikan query ini dengan nama tabel Supabase milikmu)
+    const { data: listAbsensi, error } = await supabase
+      .from("absensi")
+      .select(
+        `
+        id,
+        status,
+        catatan,
+        murid:murid_id ( nama_lengkap, nomor_induk )
+      `,
+      )
+      .eq("kelas_id", kelas_id)
+      .eq("tanggal", tanggal);
+
+    if (error) throw error;
+
+    // 2. Urutkan data secara alfabetis berdasarkan nama murid
+    listAbsensi.sort((a, b) =>
+      a.murid.nama_lengkap.localeCompare(b.murid.nama_lengkap),
+    );
+
+    // 3. Inisialisasi Workbook ExcelJS
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Laporan Presensi");
+
+    // 4. Pengaturan Header Kolom
+    worksheet.columns = [
+      { header: "NO", key: "no", width: 6 },
+      { header: "NOMOR INDUK", key: "nis", width: 18 },
+      { header: "NAMA LENGKAP", key: "nama", width: 35 },
+      { header: "STATUS PRESENSI", key: "status", width: 20 },
+      { header: "CATATAN / KETERANGAN", key: "catatan", width: 30 },
+    ];
+
+    // Styling Header Utama (Warna Hijau Gelap Premium)
+    worksheet.getRow(1).font = {
+      name: "Arial",
+      bold: true,
+      color: { argb: "FFFFFF" },
+      size: 11,
+    };
+    worksheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "2D7A4D" },
+    };
+    worksheet.getRow(1).alignment = {
+      vertical: "middle",
+      horizontal: "center",
+    };
+    worksheet.getRow(1).height = 26;
+
+    // 5. Masukkan Data Murid ke Baris Excel
+    listAbsensi.forEach((item, index) => {
+      const row = worksheet.addRow({
+        no: index + 1,
+        nis: item.murid.nomor_induk || "-",
+        nama: item.murid.nama_lengkap.toUpperCase(),
+        status: item.status.toUpperCase(),
+        catatan: item.catatan || "-",
+      });
+
+      // Berikan warna khusus pada teks status agar mudah dibaca oleh admin/kepala sekolah
+      const statusCell = row.getCell("status");
+      if (item.status.toLowerCase() === "hadir") {
+        statusCell.font = { bold: true, color: { argb: "15803D" } }; // Hijau
+      } else if (item.status.toLowerCase() === "alpa") {
+        statusCell.font = { bold: true, color: { argb: "B91C1C" } }; // Merah
+      } else {
+        statusCell.font = { bold: true, color: { argb: "B45309" } }; // Amber/Kuning
+      }
+
+      // Berikan garis tipis (border) di setiap sel agar terstruktur rapi
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.border = {
+          top: { style: "thin", color: { argb: "E2E8F0" } },
+          bottom: { style: "thin", color: { argb: "E2E8F0" } },
+          left: { style: "thin", color: { argb: "E2E8F0" } },
+          right: { style: "thin", color: { argb: "E2E8F0" } },
+        };
+        cell.font = cell.font || { name: "Arial", size: 10 };
+      });
+      row.height = 22;
+    });
+
+    // 6. Set Header Response Agar Browser Mengunduh sebagai File Excel
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=Laporan_Presensi_Kelas_${kelas_id}_${tanggal}.xlsx`,
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    res
+      .status(500)
+      .json({ message: "Gagal membuat dokumen Excel", error: err.message });
   }
 });
 
