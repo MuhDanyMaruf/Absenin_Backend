@@ -651,7 +651,8 @@ app.get("/api/guru/jadwal/:guru_id", async (req, res) => {
           WHEN hari = 'Rabu' THEN 3
           WHEN hari = 'Kamis' THEN 4
           WHEN hari = 'Jumat' THEN 5
-          ELSE 6
+          WHEN hari = 'Sabtu' THEN 6
+          ELSE 7
         END, jp.jam_mulai ASC
     `;
     const result = await db.query(queryText, [guru_id]);
