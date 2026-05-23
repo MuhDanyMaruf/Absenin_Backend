@@ -19,6 +19,10 @@ const whitelist = [
 // MIDDLEWARE GLOBAL & KONFIGURASI CORS
 // =========================================================================
 // Diperbarui agar lebih spesifik mengizinkan port lokal frontend Vue kamu (5173)
+// ====================================================================================
+// MIDDLEWARE GLOBAL & KONFIGURASI CORS
+// ====================================================================================
+// Diperbarui agar lebih spesifik mengizinkan port lokal frontend Vue kamu (5173)
 app.use(
   cors({
     origin: function (origin, callback) {
@@ -29,8 +33,8 @@ app.use(
         callback(new Error("Ditolak oleh sistem keamanan CORS Global!"));
       }
     },
-    credentials: true,
-  }),
+    credentials: true
+  }) // 🌟 PERBAIKAN: Tanda koma di sini sudah DIHAPUS bersih
 );
 
 app.use(express.json()); // Agar server bisa membaca data format JSON
