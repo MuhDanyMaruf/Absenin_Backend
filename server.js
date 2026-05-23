@@ -10,6 +10,10 @@ const authRoutes = require("./routes/authRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const whitelist = [
+  "http://localhost:5173",
+  "https://absenin-frontend.vercel.app",
+];
 
 // =========================================================================
 // MIDDLEWARE GLOBAL & KONFIGURASI CORS
@@ -17,8 +21,14 @@ const PORT = process.env.PORT || 5000;
 // Diperbarui agar lebih spesifik mengizinkan port lokal frontend Vue kamu (5173)
 app.use(
   cors({
-    origin: "https://absenin-frontend.vercel.app",
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    origin: function (origin, callback) {
+      // Izinkan jika rute terdaftar di whitelist, atau jika request tidak memiliki origin (seperti Postman)
+      if (!origin || whitelist.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        callback(new Error("Ditolak oleh sistem keamanan CORS Global!"));
+      }
+    },
     credentials: true,
   }),
 );
