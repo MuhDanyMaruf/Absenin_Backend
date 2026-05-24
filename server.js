@@ -205,14 +205,114 @@ app.get("/api/admin/users/:role", async (req, res) => {
   }
 });
 
+app.post("/api/admin/users", async (req, res) => {
+  const { username, email, password, role, nama_siswa, nis, gender, kelas_id } =
+    req.body;
+
+  try {
+    // 1. Validasi Duplikat Username / NIS / NIP
+    const checkExist = await db.query(
+      "SELECT id FROM users WHERE username = $1",
+      [username],
+    );
+    if (checkExist.rows.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Username atau NIP/NIS tersebut sudah terdaftar di sistem!",
+      });
+    }
+
+    // 2. Validasi Duplikat Email (Murni via SELECT Query)
+    const cleanEmail = email && email.trim() !== "" ? email.trim() : null;
+
+    if (cleanEmail) {
+      const checkEmailExist = await db.query(
+        "SELECT id FROM users WHERE email = $1",
+        [cleanEmail],
+      );
+      if (checkEmailExist.rows.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Email tersebut sudah digunakan oleh akun lain! Gunakan email berbeda.",
+        });
+      }
+    }
+
+    // 3. Hash Password
+    const bcrypt = require("bcrypt");
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // 4. Simpan data login ke tabel 'users'
+    const insertUserQuery = `
+      INSERT INTO users (username, email, password, role) 
+      VALUES ($1, $2, $3, $4) 
+      RETURNING id
+    `;
+    const insertUser = await db.query(insertUserQuery, [
+      username,
+      cleanEmail,
+      hashedPassword,
+      role,
+    ]);
+    const newUserId = insertUser.rows[0].id;
+
+    // 5. JIKA ROLE ADALAH SISWA, SIMPAN KE TABEL SISWA
+    if (role === "siswa") {
+      const validKelasId =
+        kelas_id && kelas_id !== "" ? parseInt(kelas_id) : null;
+
+      // 🚨 PENTING: Cek kembali apakah nama kolom di bawah ini sudah sesuai di Supabase.
+      // Jika kolom NIS di tabel siswa kamu bernama 'nis', ubah 'nisn' di bawah menjadi 'nis'.
+      const insertSiswaQuery = `
+        INSERT INTO siswa (user_id, nama_lengkap, nisn, jenis_kelamin, kelas_id) 
+        VALUES ($1, $2, $3, $4, $5)
+      `;
+
+      await db.query(insertSiswaQuery, [
+        newUserId,
+        nama_siswa,
+        nis || null,
+        gender || null,
+        validKelasId,
+      ]);
+    }
+
+    return res
+      .status(201)
+      .json({ success: true, message: "Data berhasil ditambahkan!" });
+  } catch (error) {
+    // Mencetak eror asli apa adanya di terminal backend kamu
+    console.error("❌ EROR UTAMA REKAYASA DATABASE:", error.message);
+
+    // Kirim pesan eror riil dari PostgreSQL agar frontend tidak salah tebak notifikasi
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
 // 2. Menghapus user berdasarkan ID
+// 2. Menghapus user berdasarkan ID (Dengan Proteksi Jadwal)
 app.delete("/api/admin/users/:id", async (req, res) => {
   const { id } = req.params;
   try {
     await db.query("DELETE FROM users WHERE id = $1", [id]);
     res.status(200).json({ success: true, message: "User berhasil dihapus!" });
   } catch (error) {
-    console.error(error.message);
+    console.error("Error Delete User:", error.message);
+
+    // 🌟 TANGKAP EROR RELASI DATABASE POSTGRESQL
+    if (error.code === "23503") {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Tidak dapat menghapus! Guru ini masih memiliki jadwal mengajar aktif.",
+      });
+    }
+
     res.status(500).json({ success: false, message: "Gagal menghapus user" });
   }
 });
